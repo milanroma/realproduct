@@ -13,8 +13,18 @@ export const metadata: Metadata = {
     "custom software development",
     "application development services",
   ],
+  alternates: {
+    canonical: "/services",
+  },
   openGraph: {
     title: "Services - RealProduct | Web, Mobile & Desktop Development",
+    description: "Comprehensive application development services for web, mobile, and desktop platforms.",
+    url: "/services",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Services - RealProduct",
     description: "Comprehensive application development services for web, mobile, and desktop platforms.",
   },
 };

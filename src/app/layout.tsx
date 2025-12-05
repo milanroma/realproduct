@@ -91,6 +91,8 @@ export default function RootLayout({
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#0066FF" />
+        <meta name="format-detection" content="telephone=no" />
         <StructuredData />
       </head>
       <body className={inter.variable}>

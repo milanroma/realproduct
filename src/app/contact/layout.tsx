@@ -9,8 +9,18 @@ export const metadata: Metadata = {
     "app development inquiry",
     "web development contact",
   ],
+  alternates: {
+    canonical: "/contact",
+  },
   openGraph: {
     title: "Contact Us - RealProduct | Get in Touch",
+    description: "Get in touch with RealProduct. We're here to help with your development needs.",
+    url: "/contact",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Contact Us - RealProduct",
     description: "Get in touch with RealProduct. We're here to help with your development needs.",
   },
 };

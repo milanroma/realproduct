@@ -4,9 +4,23 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Portfolio",
   description: "View our portfolio of successful projects. Coming soon - we're preparing to showcase our best work.",
+  alternates: {
+    canonical: "/portfolio",
+  },
   robots: {
     index: false,
     follow: false,
+  },
+  openGraph: {
+    title: "Portfolio - RealProduct",
+    description: "View our portfolio of successful projects. Coming soon - we're preparing to showcase our best work.",
+    url: "/portfolio",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Portfolio - RealProduct",
+    description: "View our portfolio of successful projects.",
   },
 };
 

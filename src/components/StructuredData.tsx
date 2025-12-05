@@ -16,10 +16,10 @@ export default function StructuredData() {
     contactPoint: {
       '@type': 'ContactPoint',
       contactType: 'Customer Service',
-      // Add your contact information
-      // email: 'contact@realproduct.com',
-      // telephone: '+1-234-567-8900',
+      email: 'info@realproduct.dev',
+      url: `${baseUrl}/contact`,
     },
+    email: 'info@realproduct.dev',
   };
 
   const serviceSchema = {

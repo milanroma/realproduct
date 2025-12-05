@@ -11,8 +11,18 @@ export const metadata: Metadata = {
     "engineering team",
     "application development experts",
   ],
+  alternates: {
+    canonical: "/about",
+  },
   openGraph: {
     title: "About Us - RealProduct | 20+ Years of Experience",
+    description: "Learn about RealProduct - a team of skilled engineers with 20+ years of experience in application development.",
+    url: "/about",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "About Us - RealProduct",
     description: "Learn about RealProduct - a team of skilled engineers with 20+ years of experience in application development.",
   },
 };

@@ -4,6 +4,20 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Home",
   description: "Professional custom application development services. We build web applications, mobile apps (hybrid & native), and desktop software tailored to your business needs.",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: "RealProduct - Custom App Development | Web, Mobile & Desktop",
+    description: "Professional custom application development services. We build web applications, mobile apps (hybrid & native), and desktop software tailored to your business needs.",
+    url: "/",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "RealProduct - Custom App Development",
+    description: "Professional custom application development services for web, mobile, and desktop platforms.",
+  },
 };
 
 export default function Home() {
