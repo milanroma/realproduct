@@ -1,16 +1,78 @@
 'use client';
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+
+// Simple hash function for deterministic generation (same algorithm as server)
+function simpleHash(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return Math.abs(hash);
+}
+
+// Generate a simple math challenge (deterministic based on challengeId)
+function generateMathChallenge(): { question: string; answer: number; challengeId: string } {
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(7);
+  const challengeId = `${timestamp}-${random}`;
+  
+  // Use hash of challengeId for deterministic generation (same as server)
+  const hash = simpleHash(challengeId);
+  const seed1 = hash % 256;
+  const seed2 = (hash >> 8) % 256;
+  const operationSeed = (hash >> 16) % 256;
+  
+  const num1 = (seed1 % 10) + 1; // 1-10
+  const num2 = (seed2 % 10) + 1; // 1-10
+  const operation = (operationSeed % 2) === 0 ? "+" : "-";
+  
+  let answer: number;
+  let question: string;
+  
+  if (operation === "+") {
+    answer = num1 + num2;
+    question = `${num1} + ${num2}`;
+  } else {
+    // Ensure positive result for subtraction
+    const larger = Math.max(num1, num2);
+    const smaller = Math.min(num1, num2);
+    answer = larger - smaller;
+    question = `${larger} - ${smaller}`;
+  }
+  
+  return { question, answer, challengeId };
+}
 
 export default function ContactPage() {
+  const formStartTime = useRef<number>(Date.now());
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     subject: '',
     message: '',
+    website: '', // Honeypot field - hidden from users
+    mathAnswer: '',
   });
+  const [mathChallenge, setMathChallenge] = useState<{ question: string; answer: number; challengeId: string } | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
+
+  // Generate challenge only on client side to avoid hydration mismatch
+  useEffect(() => {
+    setIsMounted(true);
+    formStartTime.current = Date.now();
+    setMathChallenge(generateMathChallenge());
+  }, []);
+
+  // Regenerate challenge if needed
+  const regenerateChallenge = () => {
+    setMathChallenge(generateMathChallenge());
+    setFormData(prev => ({ ...prev, mathAnswer: '' }));
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -26,12 +88,36 @@ export default function ContactPage() {
     setSubmitStatus('idle');
 
     try {
+      // Validate math challenge
+      if (!mathChallenge) {
+        throw new Error('Please refresh the page and try again.');
+      }
+
+      const userAnswer = formData.mathAnswer.trim();
+      const expectedAnswer = mathChallenge.answer.toString();
+      
+      if (userAnswer !== expectedAnswer) {
+        throw new Error('Incorrect answer to the math question. Please try again.');
+      }
+
+      // Calculate time spent on form (anti-bot measure)
+      const timeSpent = Date.now() - formStartTime.current;
+
       const response = await fetch('/api/contact', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          subject: formData.subject,
+          message: formData.message,
+          website: formData.website, // Honeypot - should be empty
+          timeSpent: timeSpent,
+          mathAnswer: userAnswer,
+          mathChallengeId: mathChallenge.challengeId,
+        }),
       });
 
       const data = await response.json();
@@ -41,10 +127,15 @@ export default function ContactPage() {
       }
 
       setSubmitStatus('success');
-      setFormData({ name: '', email: '', subject: '', message: '' });
+      setFormData({ name: '', email: '', subject: '', message: '', website: '', mathAnswer: '' });
+      formStartTime.current = Date.now(); // Reset timer for next submission
+      setMathChallenge(generateMathChallenge()); // Generate new challenge
     } catch (error) {
       console.error('Error submitting form:', error);
       setSubmitStatus('error');
+      if (error instanceof Error && error.message.includes('math question')) {
+        regenerateChallenge(); // Generate new challenge on error
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -191,6 +282,53 @@ export default function ContactPage() {
                     rows={6}
                     className="form-input form-textarea"
                     placeholder="Tell us about your project..."
+                  />
+                </div>
+
+                {/* Math Challenge */}
+                {isMounted && mathChallenge ? (
+                  <div className="form-group" style={{ background: '#f0f7ff', padding: '1rem', borderRadius: '8px', border: '1px solid #b3d9ff' }}>
+                    <label htmlFor="mathAnswer" className="form-label">
+                      Verification: What is <span style={{ fontFamily: 'monospace', fontSize: '1.1rem', fontWeight: 'bold', color: '#0066FF' }}>{mathChallenge.question}</span>?
+                      <button
+                        type="button"
+                        onClick={regenerateChallenge}
+                        style={{ marginLeft: '0.5rem', color: '#0066FF', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.875rem' }}
+                        title="Get a new question"
+                      >
+                        New question
+                      </button>
+                    </label>
+                    <input
+                      type="number"
+                      id="mathAnswer"
+                      name="mathAnswer"
+                      value={formData.mathAnswer}
+                      onChange={handleChange}
+                      required
+                      min="0"
+                      max="100"
+                      className="form-input"
+                      placeholder="Enter your answer"
+                    />
+                  </div>
+                ) : (
+                  <div className="form-group" style={{ background: '#f0f7ff', padding: '1rem', borderRadius: '8px', border: '1px solid #b3d9ff' }}>
+                    <div style={{ height: '60px', background: '#e0f0ff', borderRadius: '4px' }}></div>
+                  </div>
+                )}
+
+                {/* Honeypot field - hidden from users, bots will fill it */}
+                <div style={{ position: 'absolute', left: '-9999px', opacity: 0, pointerEvents: 'none' }}>
+                  <label htmlFor="website">Website (leave blank)</label>
+                  <input
+                    type="text"
+                    id="website"
+                    name="website"
+                    value={formData.website}
+                    onChange={handleChange}
+                    tabIndex={-1}
+                    autoComplete="off"
                   />
                 </div>
 

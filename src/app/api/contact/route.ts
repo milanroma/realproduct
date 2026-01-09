@@ -1,15 +1,184 @@
 import { NextRequest, NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
+import crypto from 'crypto';
+
+// Rate limiting - simple in-memory store (for production, consider Redis for distributed systems)
+const rateLimitMap = new Map<string, { count: number; timestamp: number }>();
+const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
+const MAX_REQUESTS = 3; // Max 3 requests per minute per IP
+
+// Hash IP for better privacy
+function hashIP(ip: string): string {
+  const salt = process.env.RATE_LIMIT_SALT || 'realproduct-default-salt';
+  return crypto.createHash('sha256').update(ip + salt).digest('hex').substring(0, 16);
+}
+
+function isRateLimited(ip: string): boolean {
+  const hashedIP = hashIP(ip);
+  const now = Date.now();
+  const record = rateLimitMap.get(hashedIP);
+
+  if (!record) {
+    rateLimitMap.set(hashedIP, { count: 1, timestamp: now });
+    return false;
+  }
+
+  // Reset if window expired
+  if (now - record.timestamp > RATE_LIMIT_WINDOW) {
+    rateLimitMap.set(hashedIP, { count: 1, timestamp: now });
+    return false;
+  }
+
+  // Check if limit exceeded
+  if (record.count >= MAX_REQUESTS) {
+    return true;
+  }
+
+  record.count++;
+  return false;
+}
+
+// Validate form submission time (anti-bot measure)
+// Real users need time to fill the form, bots submit instantly
+function isValidSubmissionTime(timeSpent: number): boolean {
+  const MIN_TIME = 2000; // Minimum 2 seconds (normal users need time)
+  const MAX_TIME = 30 * 60 * 1000; // Maximum 30 minutes (reasonable limit)
+  
+  return timeSpent >= MIN_TIME && timeSpent <= MAX_TIME;
+}
+
+// Simple hash function for deterministic generation (same algorithm as client)
+function simpleHash(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return Math.abs(hash);
+}
+
+// Reconstruct math challenge from challengeId (deterministic)
+function reconstructMathChallenge(challengeId: string): { answer: number } | null {
+  try {
+    // Use hash of challengeId for deterministic generation (same as client)
+    const hash = simpleHash(challengeId);
+    const seed1 = hash % 256;
+    const seed2 = (hash >> 8) % 256;
+    const operationSeed = (hash >> 16) % 256;
+    
+    const num1 = (seed1 % 10) + 1; // 1-10
+    const num2 = (seed2 % 10) + 1; // 1-10
+    const operation = (operationSeed % 2) === 0 ? "+" : "-";
+    
+    let answer: number;
+    if (operation === "+") {
+      answer = num1 + num2;
+    } else {
+      const larger = Math.max(num1, num2);
+      const smaller = Math.min(num1, num2);
+      answer = larger - smaller;
+    }
+    
+    return { answer };
+  } catch {
+    return null;
+  }
+}
+
+// Validate math challenge answer
+function validateMathChallenge(challengeId: string, userAnswer: string): boolean {
+  if (!challengeId || !userAnswer) {
+    return false;
+  }
+  
+  // Validate challengeId format (timestamp-random)
+  const parts = challengeId.split("-");
+  if (parts.length < 2) {
+    return false;
+  }
+  
+  const timestamp = parseInt(parts[0], 10);
+  if (isNaN(timestamp) || timestamp < Date.now() - 3600000) {
+    // Challenge must be less than 1 hour old
+    return false;
+  }
+  
+  const challenge = reconstructMathChallenge(challengeId);
+  if (!challenge) {
+    return false;
+  }
+  
+  const answerNum = parseInt(userAnswer, 10);
+  if (isNaN(answerNum)) {
+    return false;
+  }
+  
+  // Validate answer is in reasonable range (0-20 for simple math)
+  if (answerNum < 0 || answerNum > 20) {
+    return false;
+  }
+  
+  // Must be exact match
+  return answerNum === challenge.answer;
+}
 
 export async function POST(request: NextRequest) {
   try {
+    // Get client IP for rate limiting
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+               request.headers.get('x-real-ip') ||
+               'unknown';
+
+    // Check rate limit
+    if (isRateLimited(ip)) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please try again later.' },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json();
-    const { name, email, subject, message } = body;
+    const { name, email, subject, message, website, timeSpent, mathAnswer, mathChallengeId } = body;
 
     // Validate required fields
     if (!name || !email || !subject || !message) {
       return NextResponse.json(
         { error: 'All fields are required' },
+        { status: 400 }
+      );
+    }
+
+    // Honeypot check - if "website" field is filled, it's a bot
+    // Silently reject - don't let bots know they were caught
+    if (website && website.trim() !== '') {
+      return NextResponse.json(
+        { success: true, message: 'Email sent successfully' },
+        { status: 200 }
+      );
+    }
+
+    // Validate submission time (anti-bot measure)
+    if (timeSpent !== undefined) {
+      if (!isValidSubmissionTime(timeSpent)) {
+        return NextResponse.json(
+          { error: 'Invalid submission. Please try again.' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Validate math challenge
+    if (!mathChallengeId || !mathAnswer) {
+      return NextResponse.json(
+        { error: 'Math challenge verification failed. Please try again.' },
+        { status: 400 }
+      );
+    }
+
+    if (!validateMathChallenge(mathChallengeId, mathAnswer)) {
+      return NextResponse.json(
+        { error: 'Incorrect answer to the math question. Please try again.' },
         { status: 400 }
       );
     }

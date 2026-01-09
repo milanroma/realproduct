@@ -1510,6 +1510,7 @@ section {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-lg);
+  position: relative; /* Needed for honeypot field positioning */
 }
 
 .form-group {
